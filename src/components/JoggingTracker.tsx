@@ -1,4 +1,3 @@
-import React from 'react'
 import CanvasBoard from './CanvasBoard';
 import SessionStats from './SessionStats';
 import SessionHistory from './SessionHistory';

@@ -1,3 +1,5 @@
+export type LocationPermissionState = 'prompt' | 'granted' | 'denied';
+
 interface Position {
   lat: number;
   lng: number;
@@ -40,5 +42,5 @@ export type {
   JoggingSession,
   AppState,
   RouteCanvasProps,
-  SessionStatsProps
+  SessionStatsProps,
 };
