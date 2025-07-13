@@ -1,4 +1,4 @@
-import React from 'react'
+import type { Position, AppState, JoggingSession } from '../types/interfaces'
 
 const Session = () => {
   return (

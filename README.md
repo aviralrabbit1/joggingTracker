@@ -65,3 +65,15 @@ jogging-tracker/
 - **`RouteCanvasProps`** : Tracking all the positions the user went through on the map as `Positions[]`, `currentPosition`/null(if the app hasn't been granted access to the location).
 
 </details>
+
+<details>
+<summary>
+4. Map
+</summary>
+
+I'm using [Leaflet](https://leafletjs.com/index.html), a leading open-source JavaScript library for mobile-friendly interactive maps.
+
+- Include Leaflet CSS file in the head section of your document(`index.html`).
+- Include Leaflet JavaScript file after Leaflet’s CSS
+
+</details>
