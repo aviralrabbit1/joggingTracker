@@ -1,4 +1,4 @@
-import type { Position, LocationPermissionState } from "../../types/interfaces";
+import type { Position, LocationPermissionState } from "../types/interfaces";
 
 export class LocationPermissionService {
   private watchId: number | null = null;
