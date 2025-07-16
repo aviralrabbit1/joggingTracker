@@ -24,9 +24,6 @@ const SessionHistory: React.FC<{ sessions: JoggingSession[] }> = ({ sessions }) 
     );
   }
 
-  // Memoize reversed sessions for efficiency
-  const reversedSessions = React.useMemo(() => [...sessions].reverse(), [sessions]);
-
   return (
     <div className="bg-white rounded-xl shadow-lg p-6">
       <div className="flex items-center justify-between mb-6">
@@ -71,7 +68,7 @@ const SessionHistory: React.FC<{ sessions: JoggingSession[] }> = ({ sessions }) 
       {/* Session List */}
       {isExpanded && (
         <div className="space-y-3 max-h-96 overflow-y-auto">
-          {reversedSessions.map((session, index) => (
+          {sessions.slice().reverse().map((session, index) => (
             <div
               key={session.id}
               className={`border rounded-lg p-4 transition-all cursor-pointer ${
