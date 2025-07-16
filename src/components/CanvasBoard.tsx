@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react'
-import L from 'leaflet';
-import type { Position, RouteCanvasProps } from '../types/interfaces'
+import type { RouteCanvasProps } from '../types/interfaces'
 
 const CanvasBoard: React.FC<RouteCanvasProps> = ({ positions, currentPosition }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);

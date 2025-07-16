@@ -143,18 +143,26 @@ export class SessionService {
     avgPace: number;
     totalSessions: number;
   } {
-    const totalDistance = sessions.reduce((sum, session) => sum + session.distance, 0);
-    const totalDuration = sessions.reduce((sum, session) => sum + session.duration, 0);
-    const avgPace = sessions.length > 0 
-      ? sessions.reduce((sum, session) => sum + session.avgPace, 0) / sessions.length 
-      : 0;
+    if (sessions.length) {
+      const totalDistance = sessions.reduce((sum, session) => sum + session.distance, 0);
+      const totalDuration = sessions.reduce((sum, session) => sum + session.duration, 0);
+      const avgPace = sessions.length > 0 
+        ? sessions.reduce((sum, session) => sum + session.avgPace, 0) / sessions.length 
+        : 0;
+        return {
+          totalDistance,
+          totalDuration,
+          avgPace,
+          totalSessions: sessions.length
+        } 
+      }
+      return {
+        totalDistance: 0,
+        totalDuration: 0,
+        avgPace: 0,
+        totalSessions: 0
+      }
 
-    return {
-      totalDistance,
-      totalDuration,
-      avgPace,
-      totalSessions: sessions.length
-    };
   }
 
   // Filter sessions by date range
