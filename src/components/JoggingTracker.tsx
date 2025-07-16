@@ -1,148 +1,305 @@
-import React, { useState } from 'react';
-import { History, MapPin, Clock, Zap, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Play, Pause, Square, MapPin, Zap, AlertTriangle, CheckCircle } from 'lucide-react';
+import CanvasBoard from './CanvasBoard';
+import SessionHistory from './SessionHistory';
+import IdleSaveTask from './IdleSaveTask';
+import { useLocationTracking } from '../hooks/useLocationTracking';
+import { useSessionPersistence } from '../hooks/useSessionPersistence';
 import { sessionService } from '../services/sessionService';
-import type { JoggingSession } from '../types/interfaces';
+import type { JoggingSession, Position } from '../types/interfaces';
 
-const SessionHistory: React.FC<JoggingSession[]> = (sessions) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+const JoggingTracker: React.FC = () => {
+  const [isTracking, setIsTracking] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [currentSession, setCurrentSession] = useState<JoggingSession | null>(null);
+  
+  const startTimeRef = useRef<number>(0);
+  const pausedTimeRef = useRef<number>(0);
 
-  const overallStats = sessionService.calculateOverallStats(sessions);
+  // Custom hooks
+  const {
+    currentPosition,
+    locationPermission,
+    isRequestingPermission,
+    error: locationError,
+    requestLocationPermission,
+    startTracking: startLocationTracking,
+    stopTracking: stopLocationTracking,
+    setError: setLocationError
+  } = useLocationTracking();
 
-  if (sessions.length === 0) {
-    return (
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <h2 className="text-xl font-semibold mb-4 flex items-center space-x-2">
-          <History className="h-5 w-5 text-blue-500" />
-          <span>Session History</span>
-        </h2>
-        <div className="text-center py-8 text-gray-500">
-          <History className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>No jogging sessions yet. Start your first run!</p>
-        </div>
-      </div>
-    );
-  }
+  const {
+    sessions,
+    addSession,
+    saveAppState,
+    loadAppState,
+    clearAppState
+  } = useSessionPersistence();
+
+  // Restore state from localStorage on mount
+  useEffect(() => {
+    const savedState = loadAppState();
+    if (savedState && savedState.isTracking && savedState.currentSession) {
+      setIsTracking(savedState.isTracking);
+      setIsPaused(savedState.isPaused);
+      setCurrentSession(savedState.currentSession);
+      startTimeRef.current = savedState.startTime;
+      pausedTimeRef.current = savedState.pausedTime;
+      
+      // Show restoration notification
+      setLocationError('Session restored from previous page refresh');
+      setTimeout(() => setLocationError(''), 3000);
+    }
+  }, [loadAppState, setLocationError]);
+
+  // Save state whenever tracking state changes
+  useEffect(() => {
+    saveAppState({
+      isTracking,
+      isPaused,
+      currentSession,
+      startTime: startTimeRef.current,
+      pausedTime: pausedTimeRef.current
+    });
+  }, [isTracking, isPaused, currentSession, saveAppState]);
+
+  // Handle beforeunload (page refresh/close)
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isTracking) {
+        e.preventDefault();
+        e.returnValue = 'You have an active jogging session. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isTracking]);
+
+  // Handle location updates during tracking
+  const handleLocationUpdate = (position: Position) => {
+    console.log('🎯 Location update received in JoggingTracker:', position);
+    
+    if (currentSession && isTracking && !isPaused) {
+      console.log('📝 Adding position to current session');
+      setCurrentSession(prev => 
+        prev ? sessionService.addPositionToSession(prev, position) : null
+      );
+    } else {
+      console.log('⏸️ Not adding position - tracking state:', { isTracking, isPaused, hasSession: !!currentSession });
+    }
+  };
+
+  // Start tracking
+  const startTracking = async () => {
+    // Check location permission first
+    if (locationPermission !== 'granted') {
+      const granted = await requestLocationPermission();
+      if (!granted) return;
+    }
+
+    const newSession = sessionService.createSession();
+    setCurrentSession(newSession);
+    setIsTracking(true);
+    setIsPaused(false);
+    startTimeRef.current = Date.now();
+    pausedTimeRef.current = 0;
+    setLocationError('');
+    
+    // Start location tracking
+    startLocationTracking(handleLocationUpdate);
+    
+    // Play start sound
+  };
+
+  // Pause/Resume tracking
+  const pauseTracking = async () => {
+    const newPausedState = !isPaused;
+    setIsPaused(newPausedState);
+    
+    if (newPausedState) {
+      pausedTimeRef.current = Date.now();
+      stopLocationTracking();
+    } else {
+      const pauseDuration = Date.now() - pausedTimeRef.current;
+      startTimeRef.current += pauseDuration;
+      startLocationTracking(handleLocationUpdate);
+    }
+  };
+
+  // Stop tracking
+  const stopTracking = async () => {
+    if (currentSession) {
+      const completedSession = sessionService.completeSession(currentSession);
+      addSession(completedSession);
+      setCurrentSession(null);
+    }
+    
+    setIsTracking(false);
+    setIsPaused(false);
+    stopLocationTracking();
+    
+    // Clear saved state
+    clearAppState();
+    
+    // Play stop sound
+  };
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold flex items-center space-x-2">
-          <History className="h-5 w-5 text-blue-500" />
-          <span>Session History</span>
-          <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-            {sessions.length}
-          </span>
-        </h2>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center space-x-1 text-blue-600 hover:text-blue-700 transition-colors"
-        >
-          <span>{isExpanded ? 'Collapse' : 'Expand'}</span>
-          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
+    <div className="max-w-6xl mx-auto p-4 space-y-6">
+      {/* Header */}
+      <div className="text-center py-6">
+        <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          Jogging Tracker
+        </h1>
+        <p className="text-gray-600 mt-2">Track your runs with real-time GPS and visual route mapping</p>
       </div>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-blue-900">
-            {sessionService.formatDistance(overallStats.totalDistance)}
+      {/* Location Permission Request */}
+      {locationPermission !== 'granted' && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <div className="flex items-center space-x-3 mb-4">
+            <MapPin className="h-6 w-6 text-blue-600" />
+            <h3 className="text-lg font-semibold text-blue-900">Location Access Required</h3>
           </div>
-          <div className="text-sm text-blue-700">Total Distance</div>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-purple-900">
-            {sessionService.formatDuration(overallStats.totalDuration)}
-          </div>
-          <div className="text-sm text-purple-700">Total Time</div>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-green-900">
-            {sessionService.formatPace(overallStats.avgPace)}/km
-          </div>
-          <div className="text-sm text-green-700">Avg Pace</div>
-        </div>
-      </div>
-
-      {/* Session List */}
-      {isExpanded && (
-        <div className="space-y-3 max-h-96 overflow-y-auto">
-          {sessions.slice().reverse().map((session, index) => (
-            <div
-              key={session.id}
-              className={`border rounded-lg p-4 transition-all cursor-pointer ${
-                selectedSession === session.id 
-                  ? 'border-blue-300 bg-blue-50' 
-                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-              onClick={() => setSelectedSession(selectedSession === session.id ? null : session.id)}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="bg-blue-100 p-2 rounded-lg">
-                    <MapPin className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <div>
-                    <div className="font-semibold">Run #{sessions.length - index}</div>
-                    <div className="text-sm text-gray-500 flex items-center space-x-1">
-                      <Calendar className="h-3 w-3" />
-                      <span>{sessionService.formatDate(session.startTime)}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-3 gap-4 text-right">
-                  <div>
-                    <div className="text-sm font-semibold">
-                      {sessionService.formatDistance(session.distance)}
-                    </div>
-                    <div className="text-xs text-gray-500">Distance</div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold">
-                      {sessionService.formatDuration(session.duration)}
-                    </div>
-                    <div className="text-xs text-gray-500">Duration</div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold">
-                      {sessionService.formatPace(session.avgPace)}/km
-                    </div>
-                    <div className="text-xs text-gray-500">Pace</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Expanded Session Details */}
-              {selectedSession === session.id && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div className="flex items-center space-x-2">
-                      <MapPin className="h-4 w-4 text-green-500" />
-                      <span>GPS Points: {session.positions.length}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Zap className="h-4 w-4 text-orange-500" />
-                      <span>Speed: {session.avgPace > 0 ? (60 / session.avgPace).toFixed(1) : '0.0'} km/h</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Clock className="h-4 w-4 text-blue-500" />
-                      <span>Started: {new Date(session.startTime).toLocaleTimeString()}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Clock className="h-4 w-4 text-purple-500" />
-                      <span>Ended: {session.endTime ? new Date(session.endTime).toLocaleTimeString() : 'N/A'}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+          <p className="text-blue-800 mb-4">
+            To track your jogging route and provide accurate distance measurements, we need access to your location.
+          </p>
+          <button
+            onClick={requestLocationPermission}
+            disabled={isRequestingPermission || locationPermission === 'denied'}
+            className={`px-6 py-3 rounded-lg font-semibold flex items-center space-x-2 transition-all ${
+              locationPermission === 'denied'
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            {isRequestingPermission ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                <span>Requesting Permission...</span>
+              </>
+            ) : locationPermission === 'denied' ? (
+              <>
+                <AlertTriangle className="h-4 w-4" />
+                <span>Permission Denied</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle className="h-4 w-4" />
+                <span>Enable Location Access</span>
+              </>
+            )}
+          </button>
+          {locationPermission === 'denied' && (
+            <p className="text-sm text-red-600 mt-2">
+              Please enable location access in your browser settings and refresh the page.
+            </p>
+          )}
         </div>
       )}
+
+      {/* Error Message */}
+      {locationError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="h-5 w-5" />
+            <span>{locationError}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Main Tracking Interface */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column: Controls and Stats */}
+        <div className="space-y-6">
+          {/* Control Panel */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-semibold mb-4 flex items-center space-x-2">
+              <Zap className="h-5 w-5 text-blue-500" />
+              <span>Session Control</span>
+            </h2>
+            
+            <div className="flex space-x-4">
+              {!isTracking ? (
+                <button
+                  onClick={startTracking}
+                  disabled={locationPermission !== 'granted'}
+                  className={`flex-1 py-3 px-6 rounded-lg font-semibold flex items-center justify-center space-x-2 transition-all duration-200 transform hover:scale-105 ${
+                    locationPermission !== 'granted'
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700'
+                  }`}
+                >
+                  <Play className="h-5 w-5" />
+                  <span>Start Run</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={pauseTracking}
+                    className={`flex-1 py-3 px-6 rounded-lg font-semibold flex items-center justify-center space-x-2 transition-all duration-200 ${
+                      isPaused 
+                        ? 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700' 
+                        : 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-white hover:from-yellow-600 hover:to-yellow-700'
+                    }`}
+                  >
+                    {isPaused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
+                    <span>{isPaused ? 'Resume' : 'Pause'}</span>
+                  </button>
+                  <button
+                    onClick={stopTracking}
+                    className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white py-3 px-6 rounded-lg font-semibold flex items-center justify-center space-x-2 hover:from-red-600 hover:to-red-700 transition-all duration-200"
+                  >
+                    <Square className="h-5 w-5" />
+                    <span>Stop</span>
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Status Indicator */}
+            <div className="mt-4 flex items-center justify-center space-x-2">
+              <div className={`w-3 h-3 rounded-full ${
+                isTracking 
+                  ? isPaused 
+                    ? 'bg-yellow-400 animate-pulse' 
+                    : 'bg-green-400 animate-pulse'
+                  : 'bg-gray-300'
+              }`}></div>
+              <span className="text-sm text-gray-600">
+                {isTracking 
+                  ? isPaused 
+                    ? 'Paused' 
+                    : 'Tracking Active'
+                  : 'Ready to Start'
+                }
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Route Canvas */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h2 className="text-xl font-semibold mb-4 flex items-center space-x-2">
+            <MapPin className="h-5 w-5 text-blue-500" />
+            <span>Route Map</span>
+          </h2>
+          <CanvasBoard 
+            positions={currentSession?.positions || []}
+            currentPosition={currentPosition}
+          />
+        </div>
+      </div>
+
+      {/* Session History */}
+      <SessionHistory sessions={sessions} />
+
+      {/* Auto Save Component */}
+      <IdleSaveTask/>
     </div>
   );
 };
 
-export default SessionHistory;
+export default JoggingTracker;
