@@ -3,7 +3,7 @@ import { History, MapPin, Clock, Zap, Calendar, ChevronDown, ChevronUp } from 'l
 import { sessionService } from '../services/sessionService';
 import type { JoggingSession } from '../types/interfaces';
 
-const SessionHistory: React.FC<{ sessions: JoggingSession[] }> = ({ sessions }) => {
+const SessionHistory: React.FC< JoggingSession[] > = ( sessions ) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
 

@@ -294,10 +294,10 @@ const JoggingTracker: React.FC = () => {
       </div>
 
       {/* Session History */}
-      <SessionHistory sessions={sessions} />
+      <SessionHistory {...sessions} />
 
       {/* Auto Save Component */}
-      <IdleSaveTask/>
+      <IdleSaveTask {...sessions} />
     </div>
   );
 };
